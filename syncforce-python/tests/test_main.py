@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.oauth2 import get_password_hash
-from app.models import User
+from app.models import User, Lead, Contract
 
 # In-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite://"
@@ -49,7 +49,7 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "message": "SyncForce is running."}
 
-def test_login(setup_database):
+def test_login_success(setup_database):
     response = client.post(
         "/token",
         data={"username": "testuser", "password": "testpassword"},
@@ -58,8 +58,14 @@ def test_login(setup_database):
     assert "access_token" in response.json()
     assert response.json()["token_type"] == "bearer"
 
+def test_login_failure(setup_database):
+    response = client.post(
+        "/token",
+        data={"username": "testuser", "password": "wrongpassword"},
+    )
+    assert response.status_code == 401
+
 def test_create_lead(setup_database):
-    # Get token
     login_response = client.post("/token", data={"username": "testuser", "password": "testpassword"})
     token = login_response.json()["access_token"]
     
@@ -92,3 +98,13 @@ def test_create_and_get_contract(setup_database):
     data = response2.json()
     assert data["title"] == "Enterprise Agreement"
     assert data["details"] == "Secret terms" # Decrypted
+    
+def test_get_nonexistent_contract(setup_database):
+    login_response = client.post("/token", data={"username": "testuser", "password": "testpassword"})
+    token = login_response.json()["access_token"]
+    
+    response = client.get(
+        "/contracts/9999",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 404
